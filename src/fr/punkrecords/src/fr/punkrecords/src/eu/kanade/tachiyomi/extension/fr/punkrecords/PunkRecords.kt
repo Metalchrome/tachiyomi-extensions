@@ -8,7 +8,8 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
-import eu.kanade.tachiyomi.util.asJsoup
+import keiyoushi.annotation.Source
+import keiyoushi.utils.asJsoup
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -17,13 +18,8 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-class PunkRecords : HttpSource() {
-
-    override val name = "Punk Records"
-
-    override val baseUrl = "https://punkrecordz.com"
-
-    override val lang = "fr"
+@Source
+abstract class PunkRecords : HttpSource() {
 
     override val supportsLatest = true
 
@@ -109,14 +105,12 @@ class PunkRecords : HttpSource() {
         val slug = response.request.url.pathSegments.lastOrNull().orEmpty()
 
         return SManga.create().apply {
-            // 1. Extraction depuis le DOM
-            title = doc.selectFirst("h1")?.text()?.trim()
+            title = doc.selectFirst("h1")?.text()
                 ?: extractJsonString(rsc, "title")
                 ?: slug
 
-            // Ligne de métadonnées DOM : "EIICHIRO ODA · 1997 · 1179 CHAPITRES · SHŌNEN"
             val metaLine = doc.select("p, div, span")
-                .map { it.ownText().trim() }
+                .map { it.ownText() }
                 .firstOrNull { it.contains("·") && it.uppercase().contains("CHAPITRE") }
 
             if (metaLine != null) {
@@ -125,7 +119,6 @@ class PunkRecords : HttpSource() {
                 genre = parts.getOrNull(3)?.takeIf { it.isNotBlank() }
             }
 
-            // 2. Enrichissement / fallback via le payload Next.js RSC
             if (author.isNullOrBlank()) {
                 author = extractJsonString(rsc, "author")
             }
@@ -135,7 +128,7 @@ class PunkRecords : HttpSource() {
 
             description = extractJsonString(rsc, "description")
                 ?: doc.select("main p")
-                    .map { it.text().trim() }
+                    .map { it.text() }
                     .firstOrNull { it.length > 40 && !it.contains("·") }
 
             thumbnail_url = extractMangaCoverFromRsc(rsc)
@@ -158,7 +151,6 @@ class PunkRecords : HttpSource() {
             return chaptersFromRsc.sortedByDescending { it.chapter_number }
         }
 
-        // Fallback DOM si les chapitres sont rendus sous forme de liens <a href="/one-piece/1197">
         return doc.select("a[href^=/$mangaSlug/]")
             .mapNotNull { element ->
                 val href = element.attr("href").trim()
@@ -182,7 +174,6 @@ class PunkRecords : HttpSource() {
         val doc = response.asJsoup()
         val rsc = extractNextRscPayload(doc)
 
-        // 1. Extraction depuis le tableau "pages":[{"key":"...","url":"https://..."}] du payload Next.js RSC
         val rscPages = PAGE_URL_REGEX.findAll(rsc)
             .map { it.groupValues[1] }
             .distinct()
@@ -194,7 +185,6 @@ class PunkRecords : HttpSource() {
             }
         }
 
-        // 2. Fallback DOM sur les balises <img> des planches
         return doc.select("img[src*=/pages/], main img[src]")
             .map { it.attr("abs:src") }
             .filter { it.isNotBlank() && !it.contains("/cover") && !it.contains("logo") }
@@ -215,7 +205,7 @@ class PunkRecords : HttpSource() {
                 val href = card.attr("href").trim()
                 if (href.isEmpty() || href == "/manga" || href == "/manga/") return@mapNotNull null
 
-                val titleText = card.selectFirst("h3, h2, h4")?.text()?.trim()
+                val titleText = card.selectFirst("h3, h2, h4")?.text()
                     ?: card.selectFirst("img")?.attr("alt")?.trim()
                     ?: return@mapNotNull null
 
@@ -280,9 +270,6 @@ class PunkRecords : HttpSource() {
             .toList()
     }
 
-    /**
-     * Rassemble et déséchappe les chunks `self.__next_f.push([1, "..."])` de Next.js App Router.
-     */
     private fun extractNextRscPayload(doc: Document): String {
         val rawScripts = doc.select("script")
             .map { it.data() }
@@ -329,17 +316,14 @@ class PunkRecords : HttpSource() {
     }
 
     companion object {
-        // Extrait les URLs de planches dans "pages":[{"key":"...","url":"https://.../pages/..."}]
         private val PAGE_URL_REGEX = Regex(
             """"url"\s*:\s*"(https?://[^"]+/chapters/[^"]+/pages/[^"]+)""""
         )
 
-        // Extrait les chapitres depuis le JSON RSC : {"id":"...","slug":"1197","number":1197,"title":"...","publishedAt":"..."}
         private val CHAPTER_OBJECT_REGEX = Regex(
             """"slug"\s*:\s*"([^"]+)"\s*,\s*"number"\s*:\s*([0-9.]+)\s*,\s*"title"\s*:\s*(?:"([^"]*)"|null)(?:[^}]*?"publishedAt"\s*:\s*"([^"]+)")?"""
         )
 
-        // Fallback catalogue depuis le JSON RSC : {"id":"...","slug":"one-piece","title":"ONE PIECE",...,"cover":"..."}
         private val MANGA_OBJECT_REGEX = Regex(
             """"slug"\s*:\s*"([a-z0-9-]+)"\s*,\s*"title"\s*:\s*"([^"]+)"[^}]*?"cover"\s*:\s*"([^"]+)""""
         )
