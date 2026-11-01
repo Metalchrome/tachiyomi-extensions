@@ -1,79 +1,21 @@
-name: Build Punk Records Tachimanga Repo
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+build.gradle.kts
+100 %
+import io.github.keiyoushi.gradle.api.ContentWarning
 
-permissions:
-  contents: write
+plugins {
+    alias(kei.plugins.extension)
+}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+keiyoushi {
+    name = "Punk Records"
+    versionCode = 1
+    contentWarning = ContentWarning.SAFE
+    libVersion = "1.4"
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Generate signing key
-        run: |
-          keytool -genkey -v -keystore signing.jks -alias extension \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=PunkRecords, OU=Dev, O=Tachimanga, L=Paris, S=IDF, C=FR"
-
-      - name: Build Punk Records APK
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/signing.jks
-          KEYSTORE_PASSPHRASE: android
-          KEY_ALIAS: extension
-          KEY_PASSPHRASE: android
-        run: |
-          chmod +x gradlew
-          ./gradlew :src:fr:punkrecords:assembleRelease
-
-      - name: Prepare Tachimanga Repo Index
-        run: |
-          mkdir -p repo/apk
-          APK_FILE=$(find src/fr/punkrecords/build/outputs/apk/release -name "*.apk" | head -n 1)
-          APK_NAME="tachiyomi-fr.punkrecords-v1.4.1.apk"
-          cp "$APK_FILE" "repo/apk/$APK_NAME"
-
-          cat <<EOF > repo/index.min.json
-          [
-            {
-              "name": "Tachiyomi: Punk Records",
-              "pkg": "eu.kanade.tachiyomi.extension.fr.punkrecords",
-              "apk": "$APK_NAME",
-              "lang": "fr",
-              "code": 1,
-              "version": "1.4.1",
-              "nsfw": 0,
-              "sources": [
-                {
-                  "name": "Punk Records",
-                  "lang": "fr",
-                  "id": "6841928374619283741",
-                  "baseUrl": "https://punkrecordz.com"
-                }
-              ]
-            }
-          ]
-          EOF
-
-      - name: Publish to repo branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./repo
-          publish_branch: repo
+    source {
+        lang = "fr"
+        baseUrl = "https://punkrecordz.com"
+    }
+}
+Affichage de build.gradle.kts
